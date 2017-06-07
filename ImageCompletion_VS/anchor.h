@@ -18,13 +18,11 @@ typedef enum{
 //contain all the information of a patch.
 class Anchor{
 private:
+
+public:
 	//record the points's range contained in the patch whose center is the anchor.
 	int begin_point;
 	int end_point;
-
-    double computeES();
-    double computeEI();
-public:
     int anchor_point;
     PointType type;
     double E1;
@@ -35,7 +33,5 @@ public:
     ~Anchor(){
     }
     void getNeighbors();
-    void computeE1();
-    void computeE2();
 };
 #endif // ANCHOR_H
