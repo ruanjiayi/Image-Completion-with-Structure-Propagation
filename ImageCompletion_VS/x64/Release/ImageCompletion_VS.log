@@ -1,9 +1,16 @@
-﻿  anchor.cpp
+﻿  GraphStructure.cpp
+GraphStructure.cpp(55): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(56): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(57): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(89): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(320): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(321): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  anchor.cpp
   main.cpp
   Generating code
-  37 of 424 functions ( 8.7%) were compiled, the rest were copied from previous compilation.
+  33 of 411 functions ( 8.0%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    20 functions had inline decision re-evaluated but remain unchanged
+    25 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   ImageCompletion_VS.vcxproj -> F:\computer_graphics_research_progress\ImageCompletion_VS\x64\Release\ImageCompletion_VS.exe
   ImageCompletion_VS.vcxproj -> F:\computer_graphics_research_progress\ImageCompletion_VS\x64\Release\ImageCompletion_VS.pdb (Full PDB)

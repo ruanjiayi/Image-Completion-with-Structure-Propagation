@@ -25,11 +25,8 @@ public:
 	int end_point;
     int anchor_point;
     PointType type;
-    double E1;
     vector<int> neighbors;
-    vector<double> E2;//the number corresponding to the neighors.
-    Anchor(int begin,int anchor,PointType t):begin_point(begin), anchor_point(anchor),type(t){
-    }
+	Anchor(int begin, int anchor, int end, PointType t);
     ~Anchor(){
     }
     void getNeighbors();
