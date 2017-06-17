@@ -121,15 +121,13 @@ Mat Photometric::blend(Mat dstMat, Mat srcMat, Mat maskMat, int offset_x, int of
 						{
 							sum_boundary += base.ATD(D_OFFSET(i));
 						}
-
-
 					}
 					new_val = (sum_fq + sum_vpq + sum_boundary) / 4.0;
-					dx += abs(new_val(0) - result.ATD(y, x)(0))
-						+ abs(new_val(1) - result.ATD(y, x)(1))
-						+ abs(new_val(2) - result.ATD(y, x)(2));
+					dx += abs(new_val(0) - result.ATD(y + offset_y, x + offset_x)(0))
+						+ abs(new_val(1) - result.ATD(y + offset_y, x + offset_x)(1))
+						+ abs(new_val(2) - result.ATD(y + offset_y, x + offset_x)(2));
 					absx += abs(new_val(0)) + abs(new_val(1)) + abs(new_val(2));
-					result.ATD(y, x) = (1 - omega)*result.ATD(y, x) + omega*new_val;
+					result.ATD(y + offset_y, x + offset_x) = (1 - omega)*result.ATD(y + offset_y, x + offset_x) + omega*new_val;
 				}
 			}
 		}
@@ -146,6 +144,126 @@ Mat Photometric::blend(Mat dstMat, Mat srcMat, Mat maskMat, int offset_x, int of
 	}
 	result.convertTo(result, CV_8UC3);
 	std::cout << "Iteration times: " << cnt << std::endl;
+	return result;
+}
+
+// in that case, mask can be arbitrary shape
+Mat Photometric::blendE(Mat dstMat, Mat srcMat, Mat maskMat, int offset_x, int offset_y)
+{
+	Mat base, src;
+	dstMat.convertTo(base, CV_64FC3);
+	srcMat.convertTo(src, CV_64FC3);
+	Mat result = Mat(base.size().height, base.size().width, CV_64FC3);
+	base.copyTo(result);
+	// get actual size of coefficient matrix
+	int width, height, y, x, i, ch, cnt = 0;
+	width = src.size().width;
+	height = src.size().height;
+	Mat index = Mat(height, width, CV_32S);
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			if (maskMat.ATU(y, x) == M_SRC)
+			{
+				index.at<int>(y, x) = cnt;
+				cnt++;
+			}
+		}
+	}
+	// init Ax=b
+	Eigen::SparseMatrix<double> A;
+	Eigen::VectorXd b[3], sol[3];
+	A = Eigen::SparseMatrix<double>(cnt, cnt);
+	A.reserve(Eigen::VectorXd::Constant(cnt, 5));
+	for (i = 0; i < 3; i++)
+	{
+		b[i] = Eigen::VectorXd(cnt);
+		sol[i] = Eigen::VectorXd(cnt);
+	}
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			if (maskMat.ATU(y, x) == M_SRC)
+			{
+				for (ch = 0; ch < 3; ch++)
+				{
+					double sum_vpq = 0, sum_boundary = 0;
+					// neighbors
+					double neighbor = 0;
+					// traverse neighbors
+					for (i = 0; i < 4; i++)
+					{
+						if (y + offset_t[i][0] < 0
+							|| y + offset_t[i][0] >= height
+							|| x + offset_t[i][1] < 0
+							|| x + offset_t[i][1] >= width)
+						{
+							continue;
+						}
+						neighbor += 1.0;
+						if (maskMat.ATU(L_OFFSET(i)) == M_SRC)
+						{
+							if (mixing&&abs(src.ATD(y, x)(ch) - src.ATD(L_OFFSET(i))(ch)) <
+								abs(base.ATD(y + offset_y, x + offset_x)(ch) - base.ATD(D_OFFSET(i))(ch)))
+							{
+								sum_vpq += base.ATD(y + offset_y, x + offset_x)(ch) - base.ATD(D_OFFSET(i))(ch);
+							}
+							else
+							{
+								sum_vpq += src.ATD(y, x)(ch) - src.ATD(L_OFFSET(i))(ch);
+							}
+							if (ch == 0)
+							{
+								A.insert(index.at<int>(y, x), index.at<int>(L_OFFSET(i))) = -1.0;
+							}
+						}
+						else
+						{
+							sum_boundary += base.ATD(D_OFFSET(i))(ch);
+						}
+					}
+					if (ch == 0)
+					{
+						A.insert(index.at<int>(y, x), index.at<int>(y, x)) = neighbor;
+					}
+					b[ch](index.at<int>(y, x)) = sum_boundary + sum_vpq;
+				}
+			}
+		}
+	}
+	// eigen solver
+	Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> solver;
+	solver.compute(A);
+	if (solver.info() != Eigen::Success)
+	{
+		std::cout << "decomposition failed" << std::endl;
+		return result;
+	}
+	for (ch = 0; ch < 3; ch++)
+	{
+		sol[ch] = solver.solve(b[ch]);
+		if (solver.info() != Eigen::Success)
+		{
+			std::cout << "solving failed" << std::endl;
+			return result;
+		}
+	}
+	for (ch = 0; ch < 3; ch++)
+	{
+		for (y = 0; y < height; y++)
+		{
+			for (x = 0; x < width; x++)
+			{
+				if (maskMat.ATU(y, x) == M_SRC)
+				{
+					result.ATD(y + offset_y, x + offset_x)(ch) = sol[ch](index.at<int>(y, x));
+				}
+			}
+		}
+	}
+	result.convertTo(result, CV_8UC3);
 	return result;
 }
 
@@ -260,11 +378,11 @@ void Photometric::correctE(Mat & patch, int offset_x, int offset_y)
 	height = patch.size().height;
 	Eigen::SparseMatrix<double> A;
 	Eigen::VectorXd b[3], sol[3];
-	A= Eigen::SparseMatrix<double>(height*width, height*width);
+	A = Eigen::SparseMatrix<double>(height*width, height*width);
 	A.reserve(Eigen::VectorXd::Constant(height*width, 5));
 	for (i = 0; i < 3; i++)
 	{
-		
+
 		b[i] = Eigen::VectorXd(height*width);
 		sol[i] = Eigen::VectorXd(height*width);
 	}
@@ -309,7 +427,7 @@ void Photometric::correctE(Mat & patch, int offset_x, int offset_y)
 						break;
 					case M_SRC:
 						// in region
-						if(ch==0)
+						if (ch == 0)
 							A.insert(index.at<int>(y, x), index.at<int>(L_OFFSET(i))) = -1.0;
 						// gradient
 						sum_vpq += src.ATD(y, x)(ch) - src.ATD(L_OFFSET(i))(ch);

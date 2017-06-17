@@ -29,6 +29,8 @@ public:
 	static void useMixing(bool toggle);
 	// poisson blending
 	static Mat blend(Mat dstMat, Mat srcMat, Mat maskMat, int rel_offset_x, int rel_offset_y);
+	// poisson blending with Eigen
+	static Mat blendE(Mat dstMat, Mat srcMat, Mat maskMat, int rel_offset_x, int rel_offset_y);
 	// mask M_BORDER for border, M_DST for base image, M_SRC for src image
 	static Mat mask;
 	// store the original image
