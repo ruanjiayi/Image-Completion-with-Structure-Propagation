@@ -25,10 +25,11 @@ public:
 	int end_point;
     int anchor_point;
     PointType type;
-    vector<int> neighbors;
+    vector<Anchor> neighbors;
 	Anchor(int begin, int anchor, int end, PointType t);
+	Anchor() {
+	}
     ~Anchor(){
     }
-    void getNeighbors();
 };
 #endif // ANCHOR_H
