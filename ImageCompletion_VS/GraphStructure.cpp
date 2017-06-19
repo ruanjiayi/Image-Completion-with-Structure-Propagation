@@ -462,7 +462,7 @@ void GraphStructure::copyToLargePic(Anchor unknown, Mat patch, Mat large,int poi
 }
 
 bool ifClose(Point2i A, Point2i B) {
-	if (norm(A - B) < norm(PatchSizeCol/2, PatchSizeRow/2))
+	if (norm(A - B) < norm(Point2i(PatchSizeCol/2, PatchSizeRow/2)))
 		return true;
 	return false;
 }
@@ -510,12 +510,16 @@ void Union_Two(vector<int>& union_set,vector<int>& union_num, int i, int j) {
 
 //Add two one-dimensional vectors,the result are contained in the first parameter(array)
 void addTwoVec(float* a1, float*a2, int n) {
+	cout << "in addTwoVec()";
 	for (int i = 0;i < n; i++) {
 		a1[i] = a1[i] + a2[i];
+		cout << a1[i] << " ";
 	}
+	cout << endl;
 }
 
 void minusTwoVec(float* a1, float*a2, int n) {
+	
 	for (int i = 0;i < n; i++) {
 		a1[i] = a1[i] - a2[i];
 	}
@@ -562,7 +566,12 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 		}
 	}
 
-	for (int y = 0;y < unknown_size;y++) {
+	for (i = 0;i < unknown_size;i++) {
+		for (j = 0;j < sample_size;j++)
+			E1[i][j] = -1;
+	}
+
+	for (int y = 0;y < 1;y++) {
 		cout << "iter time:" << y << endl;
 		for (i = 0;i < unknown_size;i++) {
 			//if (i - 1 >= 0)
@@ -584,9 +593,14 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 				minusTwoVec(neighM_sum, M[neighbor][i], sample_size);
 				//compute E1 of anchor i
 				for (j = 0;j < sample_size;j++) {
-					E1[i][j]= computeE1(unknown[i], sample[j], point_index);
+					if(E1[i][j]==-1)
+						E1[i][j]= computeE1(unknown[i], sample[j], point_index);
 				}
 				addTwoVec(neighM_sum,E1[i], sample_size);
+				for (j = 0;j < sample_size;j++) {
+					cout << neighM_sum[j] << " ";
+				}
+				cout << endl;
 				//cout << "E1 computed" << endl;
 				//compute E2 of anchor i and anchor neighbor
 				//cout << "anchor one:" << this->points[point_index][unknown[i].anchor_point] <<" "
@@ -605,6 +619,7 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 						tmp_min = min(tmp_min, neighM_sum[j] + tmp);
 					}
 					neighM_sum[j] = tmp_min;
+					//cout << "tmp_min:" << tmp_min << " ";
 				}
 				//cout << "E2 computed" << endl;
 				//update the message
@@ -614,6 +629,7 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 					if (M[i][k][j] != neighM_sum[j]) {
 						tmp_flag = false;
 						M[i][k][j] = neighM_sum[j];
+						//cout << "message:" << M[i][k][j] << " inde: " << i << " " << k << " " << j << endl;
 					}
 				}
 				if (tmp_flag) {
@@ -641,7 +657,7 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 			if (neighM_sum[k] < min_tmp) {
 				index_tmp = k;
 				min_tmp = neighM_sum[k];
-				cout << min_tmp << " ";
+				cout << "min_tmp:"<<min_tmp << " index_tmp"<<k<<" ";
 			}
 		}
 		sample_index.push_back(index_tmp);
