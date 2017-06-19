@@ -1,9 +1,7 @@
 #ifndef _GRAPH_STRUCTURE_H
 #define _GRAPH_STRUCTURE_H
 
-#include <opencv2\opencv.hpp>
 #include "anchor.h"
-using namespace cv;
 
 class GraphStructure{
 private:
@@ -39,6 +37,7 @@ private:
 	vector<int> DP(vector<Anchor> sample, vector<Anchor> unknown, int point_index);
 
 	void GraphStructure::DrawOneLine(vector<Anchor> sample, vector<Anchor> unknown, int point_index,bool flag);
+	void GraphStructure::DrawIntersectedLine(vector<int> union_set);
 
 	void GraphStructure::computeAnchors(int point_index, vector<Anchor>& sample, vector<Anchor>& unknown);
 
@@ -69,6 +68,8 @@ public:
 
 	//Draw the new picture with the propagated structure
 	void DrawNewStructure();
+
+	void getNeighbors(int index);
 
 };
 

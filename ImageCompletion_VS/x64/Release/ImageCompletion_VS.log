@@ -1,13 +1,18 @@
 ﻿  GraphStructure.cpp
-GraphStructure.cpp(55): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
-GraphStructure.cpp(56): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
-GraphStructure.cpp(57): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
-GraphStructure.cpp(100): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
-GraphStructure.cpp(357): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-GraphStructure.cpp(358): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-GraphStructure.cpp(478): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(92): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(93): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(94): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(138): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+GraphStructure.cpp(398): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(399): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(477): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(533): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(534): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(660): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(680): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+GraphStructure.cpp(681): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
   Generating code
-  14 of 626 functions ( 2.2%) were compiled, the rest were copied from previous compilation.
+  15 of 628 functions ( 2.4%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
     6 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
