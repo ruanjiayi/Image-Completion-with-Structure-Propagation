@@ -9,6 +9,7 @@
 #define M_DST 0
 #define M_SRC 1
 #define M_BORDER 2
+#define M_BOUNDARY 3
 
 int offset_t[4][2] = { {1,0},{-1,0},{0,1},{0,-1} };
 // local offset: + offset
@@ -16,7 +17,8 @@ int offset_t[4][2] = { {1,0},{-1,0},{0,1},{0,-1} };
 // dst offset: + patch pos + offset
 #define D_OFFSET(i) (y+offset_y+offset_t[i][0]),(x+offset_x+offset_t[i][1])
 // mask offset: + patch pos + 1 + offset
-#define M_OFFSET(i) (y+offset_y+1+offset_t[i][0]),(x+offset_x+1+offset_t[i][1])
+// #define M_OFFSET(i) (y+offset_y+1+offset_t[i][0]),(x+offset_x+1+offset_t[i][1])
+#define M_OFFSET(i) (y+offset_y+offset_t[i][0]),(x+offset_x+offset_t[i][1])
 
 // init
 Mat Photometric::mask;
@@ -39,7 +41,7 @@ Photometric::~Photometric()
 void Photometric::initMask(Mat image, Mat imageMask, uchar unknown, uchar known)
 {
 	Mat temp;
-	Rect roi = Rect(1, 1, imageMask.size().width, imageMask.size().height);
+	// Rect roi = Rect(1, 1, imageMask.size().width, imageMask.size().height);
 	// update tol & omega for SOR
 	tol = 1e-6;
 	omega = 1.8;
@@ -48,12 +50,16 @@ void Photometric::initMask(Mat image, Mat imageMask, uchar unknown, uchar known)
 	image.convertTo(temp, CV_64FC3);
 	temp.copyTo(dst);
 	// create mask, +2 is for border
-	mask = Mat(imageMask.size().height + 2, imageMask.size().width + 2, CV_8U);
+	// mask = Mat(imageMask.size().height + 2, imageMask.size().width + 2, CV_8U);
+	// the same size is okay
+	mask = Mat(imageMask.size().height, imageMask.size().width, CV_8U);
 	// update mask, treat unknown region as border
 	mask.setTo(Scalar(unknown));
-	imageMask.copyTo(mask(roi));
+	//imageMask.copyTo(mask(roi));
+	imageMask.copyTo(mask);
 	Mat unknown_roi = mask == unknown;
 	Mat known_roi = mask == known;
+	// M_BORDER will be useless
 	mask.setTo(Scalar(M_BORDER), unknown_roi);
 	mask.setTo(Scalar(M_DST), known_roi);
 	return;
@@ -75,7 +81,6 @@ void Photometric::useMixing(bool toggle)
 // poisson blending with SOR
 // mask is the same size with src
 // offset_x|y is the relative offset
-// TODO: blend with Eigen
 Mat Photometric::blend(Mat dstMat, Mat srcMat, Mat maskMat, int offset_x, int offset_y)
 {
 	double epsilon, previous_epsilon = 1e30;
@@ -281,13 +286,32 @@ void Photometric::correct(Mat &patch, int offset_x, int offset_y)
 	height = patch.size().height;
 	// src: patch with double type
 	// result: the modified patch
-	Mat src;
-	patch.convertTo(src, CV_64FC3);
+	Mat patch_d;
+	patch.convertTo(patch_d, CV_64FC3);
 	Mat result = Mat(height, width, CV_64FC3);
-	src.copyTo(result);
-	// update dst mask: the blend region
-	Rect patch_mask = Rect(offset_x + 1, offset_y + 1, width, height);
-	mask(patch_mask).setTo(Scalar(1));
+	Mat src = Mat(height, width, CV_64FC3);
+	patch_d.copyTo(result);
+	patch_d.copyTo(src);
+	Rect patch_mask = Rect(offset_x, offset_y, width, height);
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			if (mask.ATU(y + offset_y, x + offset_x) == M_DST)
+			{
+				result.ATD(y, x) = dst.ATD(y + offset_y, x + offset_x);
+				src.ATD(y, x) = dst.ATD(y + offset_y, x + offset_x);
+			}
+			else if (mask.ATU(y + offset_y, x + offset_x) == M_BORDER)
+			{
+				mask.ATU(y + offset_y, x + offset_x) = M_SRC;
+			}
+			if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
+			{
+				mask.ATU(y + offset_y, x + offset_x) = M_BOUNDARY;
+			}
+		}
+	}
 	// SOR iteration
 	while (1)
 	{
@@ -295,59 +319,58 @@ void Photometric::correct(Mat &patch, int offset_x, int offset_y)
 		double dx = 0, absx = 0;
 		// traverse all f_q in patch
 		// we know that the patch is a square
-		for (y = 0; y < height; y++)
+		for (y = 1; y < height - 1; y++)
 		{
-			for (x = 0; x < width; x++)
+			for (x = 1; x < width - 1; x++)
 			{
-				// useless checking
-				if (mask.ATU(y + offset_y + 1, x + offset_x + 1) == 1)
+				// neighbors
+				double neighbor = 0;
+				// for SOR iteration
+				Vec3d sum_fq = Vec3d(0, 0, 0);
+				Vec3d sum_vpq = Vec3d(0, 0, 0);
+				Vec3d sum_boundary = Vec3d(0, 0, 0);
+				Vec3d new_val = Vec3d(0, 0, 0);
+				// traverse neighbors
+				for (i = 0; i < 4; i++)
 				{
-					// neighbors
-					double neighbor = 0;
-					// for SOR iteration
-					Vec3d sum_fq = Vec3d(0, 0, 0);
-					Vec3d sum_vpq = Vec3d(0, 0, 0);
-					Vec3d sum_boundary = Vec3d(0, 0, 0);
-					Vec3d new_val = Vec3d(0, 0, 0);
-					// traverse neighbors
-					for (i = 0; i < 4; i++)
+					switch (mask.ATU(M_OFFSET(i)))
 					{
-						switch (mask.ATU(M_OFFSET(i)))
+					case M_BORDER:
+						// border, truncated neighborhood
+						// will not hit
+						break;
+					case M_BOUNDARY:
+						neighbor += 1.0;
+						sum_boundary += src.ATD(L_OFFSET(i));
+						sum_vpq += src.ATD(y, x) - src.ATD(L_OFFSET(i));
+						break;
+					case M_SRC:
+					case M_DST:
+						// in region
+						sum_fq += result.ATD(L_OFFSET(i));
+						// gradient
+						if (mask.ATU(y + offset_y, x + offset_x) == mask.ATU(M_OFFSET(i)))
 						{
-						case M_BORDER:
-							// border, truncated neighborhood
-							break;
-						case M_SRC:
-							// in region
-							sum_fq += result.ATD(L_OFFSET(i));
-							// gradient
 							sum_vpq += src.ATD(y, x) - src.ATD(L_OFFSET(i));
-							neighbor += 1.0;
-							break;
-						case M_DST:
-							// known region at boundary
-							sum_boundary += dst.ATD(D_OFFSET(i));
-							// in photometric correction, v_pq at boundary setted to 0
-							// sum_vpq += src.ATD(y, x) - src.ATD(L_OFFSET(i));
-							neighbor += 1.0;
-							break;
 						}
+						neighbor += 1.0;
+						break;
 					}
-					// compute new f_p
-					new_val = (sum_fq + sum_vpq + sum_boundary) / neighbor;
-					// update difference
-					dx += abs(new_val(0) - result.ATD(y, x)(0))
-						+ abs(new_val(1) - result.ATD(y, x)(1))
-						+ abs(new_val(2) - result.ATD(y, x)(2));
-					absx += abs(new_val(0)) + abs(new_val(1)) + abs(new_val(2));
-					// update result
-					result.ATD(y, x) = (1 - omega)*result.ATD(y, x) + omega*new_val;
 				}
+				// compute new f_p
+				new_val = (sum_fq + sum_vpq + sum_boundary) / neighbor;
+				// update difference
+				dx += abs(new_val(0) - result.ATD(y, x)(0))
+					+ abs(new_val(1) - result.ATD(y, x)(1))
+					+ abs(new_val(2) - result.ATD(y, x)(2));
+				absx += abs(new_val(0)) + abs(new_val(1)) + abs(new_val(2));
+				// update result
+				result.ATD(y, x) = (1 - omega)*result.ATD(y, x) + omega*new_val;
 			}
 		}
 		cnt++;
 		epsilon = dx / absx;
-		if (fabs(epsilon) < 1e-15 || fabs(previous_epsilon - epsilon) < tol)
+		if (abs(epsilon) < 1e-15 || abs(previous_epsilon - epsilon) < tol)
 		{
 			break;
 		}
@@ -370,31 +393,45 @@ void Photometric::correct(Mat &patch, int offset_x, int offset_y)
 }
 // TODO: an unify wrapper for SOR or Eigen Direct solver
 // TODO: elegant way to build the matrices
+// TODO: !! I misunderstood the paper
+// 
 void Photometric::correctE(Mat & patch, int offset_x, int offset_y)
 {
 	// infos
 	int width, height, y, x, i, cnt = 0;
+	// need preprocessing
 	width = patch.size().width;
 	height = patch.size().height;
-	Eigen::SparseMatrix<double> A;
-	Eigen::VectorXd b[3], sol[3];
-	A = Eigen::SparseMatrix<double>(height*width, height*width);
-	A.reserve(Eigen::VectorXd::Constant(height*width, 5));
-	for (i = 0; i < 3; i++)
-	{
-
-		b[i] = Eigen::VectorXd(height*width);
-		sol[i] = Eigen::VectorXd(height*width);
-	}
+	Rect patch_mask = Rect(offset_x, offset_y, width, height);
 	// src: patch with double type
 	// result: the modified patch
 	Mat src;
 	patch.convertTo(src, CV_64FC3);
 	Mat result = Mat(height, width, CV_64FC3);
 	src.copyTo(result);
-	// update dst mask: the blend region
-	Rect patch_mask = Rect(offset_x + 1, offset_y + 1, width, height);
-	mask(patch_mask).setTo(Scalar(1));
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			if (mask.ATU(y + offset_y + 1, x + offset_x + 1) == M_DST)
+			{
+				result.ATD(y, x) = dst.ATD(y + offset_y, x + offset_x);
+			}
+			else
+			{
+				mask.ATU(y + offset_y + 1, x + offset_x + 1) = M_SRC;
+			}
+		}
+	}
+	Eigen::SparseMatrix<double> A;
+	Eigen::VectorXd b[3], sol[3];
+	A = Eigen::SparseMatrix<double>(height*width, height*width);
+	A.reserve(Eigen::VectorXd::Constant(height*width, 5));
+	for (i = 0; i < 3; i++)
+	{
+		b[i] = Eigen::VectorXd(height*width);
+		sol[i] = Eigen::VectorXd(height*width);
+	}
 	// index
 	Mat index = Mat(height, width, CV_32S);
 	for (y = 0; y < height; y++)
@@ -473,7 +510,7 @@ void Photometric::correctE(Mat & patch, int offset_x, int offset_y)
 		}
 	}
 	// update mask
-	mask(patch_mask).setTo(Scalar(M_DST));
+	//mask(patch_mask).setTo(Scalar(M_DST));
 	// get result
 	Mat uresult;
 	result.convertTo(uresult, CV_8UC3);
