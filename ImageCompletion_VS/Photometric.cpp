@@ -292,6 +292,7 @@ void Photometric::correct(Mat &patch, int offset_x, int offset_y)
 	Mat src = Mat(height, width, CV_64FC3);
 	patch_d.copyTo(result);
 	patch_d.copyTo(src);
+	Mat bitmap = Mat(height, width, CV_8U);
 	Rect patch_mask = Rect(offset_x, offset_y, width, height);
 	for (y = 0; y < height; y++)
 	{
@@ -301,10 +302,12 @@ void Photometric::correct(Mat &patch, int offset_x, int offset_y)
 			{
 				result.ATD(y, x) = dst.ATD(y + offset_y, x + offset_x);
 				src.ATD(y, x) = dst.ATD(y + offset_y, x + offset_x);
+				bitmap.ATU(y, x) = M_DST;
 			}
 			else if (mask.ATU(y + offset_y, x + offset_x) == M_BORDER)
 			{
 				mask.ATU(y + offset_y, x + offset_x) = M_SRC;
+				bitmap.ATU(y, x) = M_SRC;
 			}
 			if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
 			{
@@ -342,7 +345,10 @@ void Photometric::correct(Mat &patch, int offset_x, int offset_y)
 					case M_BOUNDARY:
 						neighbor += 1.0;
 						sum_boundary += src.ATD(L_OFFSET(i));
-						sum_vpq += src.ATD(y, x) - src.ATD(L_OFFSET(i));
+						if (bitmap.ATU(y, x) == bitmap.ATU(L_OFFSET(i)))
+						{
+							sum_vpq += src.ATD(y, x) - src.ATD(L_OFFSET(i));
+						}
 						break;
 					case M_SRC:
 					case M_DST:
@@ -405,49 +411,65 @@ void Photometric::correctE(Mat & patch, int offset_x, int offset_y)
 	Rect patch_mask = Rect(offset_x, offset_y, width, height);
 	// src: patch with double type
 	// result: the modified patch
-	Mat src;
-	patch.convertTo(src, CV_64FC3);
+	Mat patch_d;
+	patch.convertTo(patch_d, CV_64FC3);
 	Mat result = Mat(height, width, CV_64FC3);
-	src.copyTo(result);
+	patch_d.copyTo(result);
+	Mat src = Mat(height, width, CV_64FC3);
+	patch_d.copyTo(src);
+	Mat bitmap = Mat(height, width, CV_8U);
 	for (y = 0; y < height; y++)
 	{
 		for (x = 0; x < width; x++)
 		{
-			if (mask.ATU(y + offset_y + 1, x + offset_x + 1) == M_DST)
+			if (mask.ATU(y + offset_y, x + offset_x) == M_DST)
 			{
 				result.ATD(y, x) = dst.ATD(y + offset_y, x + offset_x);
+				src.ATD(y, x) = dst.ATD(y + offset_y, x + offset_x);
+				bitmap.ATU(y, x) = M_DST;
 			}
-			else
+			else if (mask.ATU(y + offset_y, x + offset_x) == M_BORDER)
 			{
-				mask.ATU(y + offset_y + 1, x + offset_x + 1) = M_SRC;
+				mask.ATU(y + offset_y, x + offset_x) = M_SRC;
+				bitmap.ATU(y, x) = M_SRC;
+			}
+			if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
+			{
+				mask.ATU(y + offset_y, x + offset_x) = M_BOUNDARY;
 			}
 		}
 	}
 	Eigen::SparseMatrix<double> A;
 	Eigen::VectorXd b[3], sol[3];
-	A = Eigen::SparseMatrix<double>(height*width, height*width);
-	A.reserve(Eigen::VectorXd::Constant(height*width, 5));
+	int total = (height - 2)*(width - 2);
+	A = Eigen::SparseMatrix<double>(total, total);
+	A.reserve(Eigen::VectorXd::Constant(total, 5));
 	for (i = 0; i < 3; i++)
 	{
-		b[i] = Eigen::VectorXd(height*width);
-		sol[i] = Eigen::VectorXd(height*width);
+		b[i] = Eigen::VectorXd(total);
+		sol[i] = Eigen::VectorXd(total);
 	}
 	// index
 	Mat index = Mat(height, width, CV_32S);
+	cnt = 0;
 	for (y = 0; y < height; y++)
 	{
 		for (x = 0; x < width; x++)
 		{
-			index.at<int>(y, x) = y*width + x;
+			if (mask.ATU(y + offset_y, x + offset_x) == M_DST || mask.ATU(y + offset_y, x + offset_x) == M_SRC)
+			{
+				index.at<int>(y, x) = cnt;
+				cnt++;
+			}
 		}
 	}
 	// traverse all f_q in patch
 	// we know that the patch is a square
 	// may using matrix manipulations if i have enough time
 	int ch;
-	for (y = 0; y < height; y++)
+	for (y = 1; y < height - 1; y++)
 	{
-		for (x = 0; x < width; x++)
+		for (x = 1; x < width - 1; x++)
 		{
 			for (ch = 0; ch < 3; ch++)
 			{
@@ -462,23 +484,34 @@ void Photometric::correctE(Mat & patch, int offset_x, int offset_y)
 					case M_BORDER:
 						// border, truncated neighborhood
 						break;
+					case M_BOUNDARY:
+						neighbor += 1.0;
+						sum_boundary += src.ATD(L_OFFSET(i))(ch);
+						if (bitmap.ATU(y, x) == bitmap.ATU(L_OFFSET(i)))
+						{
+							sum_vpq += src.ATD(y, x)(ch) - src.ATD(L_OFFSET(i))(ch);
+						}
+						break;
 					case M_SRC:
+					case M_DST:
 						// in region
 						if (ch == 0)
+						{
 							A.insert(index.at<int>(y, x), index.at<int>(L_OFFSET(i))) = -1.0;
+						}
 						// gradient
-						sum_vpq += src.ATD(y, x)(ch) - src.ATD(L_OFFSET(i))(ch);
-						neighbor += 1.0;
-						break;
-					case M_DST:
-						// known region at boundary
-						sum_boundary += dst.ATD(D_OFFSET(i))(ch);
+						if (mask.ATU(y + offset_y, x + offset_x) == mask.ATU(M_OFFSET(i)))
+						{
+							sum_vpq += src.ATD(y, x)(ch) - src.ATD(L_OFFSET(i))(ch);
+						}
 						neighbor += 1.0;
 						break;
 					}
 				}
 				if (ch == 0)
+				{
 					A.insert(index.at<int>(y, x), index.at<int>(y, x)) = neighbor;
+				}
 				b[ch](index.at<int>(y, x)) = sum_boundary + sum_vpq;
 			}
 		}
@@ -501,16 +534,16 @@ void Photometric::correctE(Mat & patch, int offset_x, int offset_y)
 	}
 	for (ch = 0; ch < 3; ch++)
 	{
-		for (y = 0; y < height; y++)
+		for (y = 1; y < height - 1; y++)
 		{
-			for (x = 0; x < width; x++)
+			for (x = 1; x < width - 1; x++)
 			{
 				result.ATD(y, x)(ch) = sol[ch](index.at<int>(y, x));
 			}
 		}
 	}
 	// update mask
-	//mask(patch_mask).setTo(Scalar(M_DST));
+	mask(patch_mask).setTo(Scalar(M_DST));
 	// get result
 	Mat uresult;
 	result.convertTo(uresult, CV_8UC3);
