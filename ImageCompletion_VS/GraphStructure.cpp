@@ -1,15 +1,12 @@
 ﻿#include "GraphStructure.h"
 
-#include <iostream>
-using namespace std;
-
 static Point2i mouse_pos;
 static int mouse_event;
 static int mouse_flags;
 
 
 //To visualize the anchor point
-//Note:This function is for debugging only.
+//Note:This function is only for debugging .
 void DrawAnchorPoints(Mat input, vector<Anchor> sample_anchors, vector<Anchor> unknown_anchors, vector<Point2i> points) {
 	int i = 0;
 	Point2i pos;
@@ -84,10 +81,6 @@ void GraphStructure::getMask()
 		if ((mouse_event == CV_EVENT_MOUSEMOVE && (mouse_flags & CV_EVENT_FLAG_LBUTTON)) ||
 				(mouse_event == CV_EVENT_LBUTTONDOWN))
 		{
-//            circle(this->mask, mouse_pos, size, Scalar(255), -1);
-//            circle(this->image_with_mask, mouse_pos, size, Scalar(255), -1);
-//			circle(toshow, mouse_pos, size, Scalar(255, 0, 0), -1);
-//			circle(totoshow, mouse_pos, size, Scalar(255, 0, 0), -1);
             if(last_pos.x != -1 && last_pos.y != -1){
                 line(this->mask, last_pos, mouse_pos, Scalar(0),1.5*size);
                 line(toshow, last_pos, mouse_pos, Scalar(255, 0, 0),1.5*size);
@@ -156,7 +149,7 @@ void GraphStructure::getCurve(){
         circle(totoshow, mouse_pos, size, Scalar(0, 255, 255), -1);
         imshow("Generate Specified Curves", totoshow);
     }
-    destroyWindow("Generate Specified Curves");
+    //destroyWindow("Generate Specified Curves");
 }
 
 //Get the patch type and the points' last index
@@ -175,7 +168,7 @@ int  GraphStructure::getPointsInPatch(int last_anchor, int anchor,PointType& typ
 		type = INNER;
 	else
 		type = OUTER;
-	while(rec.contains(this->points[point_index][i])
+	while(i < this->points[point_index].size() && rec.contains(this->points[point_index][i])
 		/*points[i].x>=left_x&&points[i].x<=right_x&&points[i].y>=top_y&&points[i].y<=bottom_y*/) {
 		if ((this->mask.at<uchar>(this->points[point_index][i]) == 0 && type == OUTER )||
 			(this->mask.at<uchar>(this->points[point_index][i]) > 0 && type == INNER)) {
@@ -203,9 +196,8 @@ void GraphStructure::computeAnchors(int point_index,vector<Anchor>& sample, vect
 	int last_anchor_point = 0;
 	int anchor_point = getPointsInPatch(last_anchor_point, 0, type, point_index);
 	int next_anchor_point = getPointsInPatch(last_anchor_point, anchor_point, type, point_index);
-	vector<Anchor> result;
 	while (next_anchor_point < this->points[point_index].size()) {
-		Anchor anchor(last_anchor_point, anchor_point, next_anchor_point - 1, type);
+		Anchor anchor(last_anchor_point + 1, anchor_point, next_anchor_point - 1, type);
 		if (anchor.type == OUTER)
 			sample.push_back(anchor);
 		else
@@ -255,7 +247,7 @@ float computeDist(vector<Point2i> points1, vector<Point2i> points2) {
 }
 
 float GraphStructure::computeES(Anchor unknown,Anchor sample,  int point_index) {
-	float result;
+	float result=0.0;
 	int points_num = unknown.end_point - unknown.begin_point + 1;
 
 	//Transform these two patches into the same scale space.
@@ -265,15 +257,24 @@ float GraphStructure::computeES(Anchor unknown,Anchor sample,  int point_index) 
 	vector<Point2i> points1;
 	vector<Point2i> points2;
 	for (int i = unknown.begin_point;i <= unknown.end_point;i++) {
-		points1.push_back(this->points[point_index][i] - unknown_left_top);
+		if ((this->points[point_index][i].x - unknown_left_top.x < 0 )|| (this->points[point_index][i].y - unknown_left_top.y < 0)) {
+			points1.push_back(Point2i(0,0));
+		}
+		else
+			points1.push_back(this->points[point_index][i] - unknown_left_top);
 	}
 	for (int i = sample.begin_point;i <= sample.end_point;i++) {
-		points2.push_back(this->points[point_index][i] - sample_left_top);
+		if ((this->points[point_index][i].x - sample_left_top.x < 0 || this->points[point_index][i].y - sample_left_top.y < 0)) {
+			points2.push_back(Point2i(0,0));
+		}
+		else
+			points2.push_back(this->points[point_index][i] - sample_left_top);
 	}
 	result = computeDist(points1, points2);
 	result += computeDist(points2, points1);
 	result /= points_num;// ES(xi) is further normalized by dividing the total number of points in ci
-	//cout << "ES:" << result << endl;
+	//cout << points1.size()<< " "<<points2.size() << endl;
+	//cout << "ES: " << result << endl;
 	return result;
 }
 
@@ -286,32 +287,24 @@ Point2i GraphStructure::leftTopPoint(Anchor anchor, int point_index) {
 	return pos;
 }
 
-//Point2i GraphStructure::RightbottomPoint(Anchor anchor) {
-//	Point2i pos;
-//	int index = anchor.anchor_point;
-//	pos.x = this->points[index].x + (PatchSizeRow - 1) / 2;
-//	pos.y = this->points[index].y + (PatchSizeCol - 1) / 2;
-//	return pos;
-//}
 
 //Given two images, compute the sum of the normalized squared diﬀerences between them.
 float computeSSD(Mat m1, Mat m2) {
+	float r;
 	if (m1.empty() || m2.empty()) {
 		cout << "in computeSSD() no overlapped area!" << endl;
 		return 0.0;
 	}
 		
-	Mat result;
+	Mat result(1,1,CV_32F);
 	matchTemplate(m1, m2, result, CV_TM_SQDIFF_NORMED);
-	return result.at<float>(0, 0);
+	r = result.at<float>(0, 0);
+	return r;
 }
 
 //Get the patch image(type:mat) of a given anchor.
 Mat GraphStructure::getPatch(Anchor anchor, int point_index) {
 	Mat patch;
-	//int index = anchor.anchor_point;
-	//int left_x = this->points[point_index][index].x - (PatchSizeRow - 1) / 2;
-	//int top_y = this->points[point_index][index].y - (PatchSizeCol - 1) / 2;
 	Point2i left_top = leftTopPoint(anchor, point_index);
 	Point2i right_down = left_top + Point2i(PatchSizeCol, PatchSizeRow);
 	Rect rect(left_top, right_down);
@@ -342,7 +335,7 @@ float GraphStructure::computeEI(Anchor unknown,Anchor sample, int point_index) {
 	//imshow("mask", patch_mask);
 	//waitKey(30);
 	float result = computeSSD(patch_im, sample_im);
-//	cout << "EI:"<< result << endl;
+	//cout << "EI:"<< result << endl;
 	return result;
 }
 
@@ -375,7 +368,7 @@ float GraphStructure::computeE2(Anchor unknown1, Anchor unknown2, Anchor sample1
 
 	//cout << "computeE2: " << computeSSD(patch1, patch2) << endl;
 	if (patch1.empty()) {
-		cout << "In computeE2():what??why adjacent patches don't have overlapped area????" << endl;
+		cout << "In computeE2():what??why adjacent patches don't have overlapped areas????" << endl;
 		//cout << computeSSD(large1, large2) << endl;
 		//cout << computeSSD(pat1, pat2) << endl;
 
@@ -471,7 +464,6 @@ bool ifClose(Point2i A, Point2i B) {
 bool GraphStructure::ifLineIntersect(int i1, int i2) {
 	if (this->unknown_anchors[i1].empty() || this->unknown_anchors[i2].empty())
 		return false;
-	bool flag = false;
 	int point1, point2;
 	int j, k;
 	int i1_num = this->unknown_anchors[i1].size();
@@ -480,49 +472,51 @@ bool GraphStructure::ifLineIntersect(int i1, int i2) {
 		for (k = 0;k < this->unknown_anchors[i2].size();k++) {
 			point2 = this->unknown_anchors[i2][k].anchor_point;
 			if (ifClose(this->points[i1][point1], this->points[i2][point2])) {
-				flag = true;
 				this->unknown_anchors[i1][j].neighbors.push_back(k + i1_num);
+				this->unknown_anchors[i1][j].neighbors.push_back(k + 1 + i1_num);
 				//afterwards(in DrawNewStructure()) will add i1_num
-				this->unknown_anchors[i2][k].neighbors.push_back(j - i1_num);
+				this->unknown_anchors[i2][k].neighbors[1] = j - i1_num;
+				this->unknown_anchors[i2][k + 1].neighbors[0] = j - i1_num;
 				//circle(this->image_with_mask, this->points[i1][point1], 2, Scalar(0, 0, 0));
+				return true;
 			}	
 		}
 	}
 	//imshow("intersection", this->image_with_mask);
 	//waitKey(0);
-	return flag;
+	return false;
 }
 
-int find_representative(vector<int>& union_set, int i) {
-	if (union_set[i] == -1)
-		return i;
-	union_set[i] = find_representative(union_set, union_set[i]);
-	return union_set[i];
-}
-
-void Union_Two(vector<int>& union_set,vector<int>& union_num, int i, int j) {
-	int ri = find_representative(union_set, i);
-	int rj = find_representative(union_set, j);
-	union_set[rj] = ri;
-	union_num[ri] += union_num[rj];
-	cout << "union_two:" << i << " " << j << endl;
-}
+//int find_representative(vector<int>& union_set, int i) {
+//	if (union_set[i] == -1)
+//		return i;
+//	union_set[i] = find_representative(union_set, union_set[i]);
+//	return union_set[i];
+//}
+//
+//void Union_Two(vector<int>& union_set,vector<int>& union_num, int i, int j) {
+//	int ri = find_representative(union_set, i);
+//	int rj = find_representative(union_set, j);
+//	union_set[rj] = ri;
+//	union_num[ri] += union_num[rj];
+//	cout << "union_two:" << i << " " << j << endl;
+//}
 
 //Add two one-dimensional vectors,the result are contained in the first parameter(array)
-void addTwoVec(float* a1, float*a2, int n) {
-	cout << "in addTwoVec()";
+float* addTwoVec(float* a1, float*a2, int n) {
+	float* re = new float[n];
 	for (int i = 0;i < n; i++) {
-		a1[i] = a1[i] + a2[i];
-		cout << a1[i] << " ";
+		re[i] = a1[i] + a2[i];
 	}
-	cout << endl;
+	return re;
 }
 
-void minusTwoVec(float* a1, float*a2, int n) {
-	
+float* minusTwoVec(float* a1, float*a2, int n) {
+	float* re = new float[n];
 	for (int i = 0;i < n; i++) {
-		a1[i] = a1[i] - a2[i];
+		re[i] = a1[i] - a2[i];
 	}
+	return re;
 }
 
 void initialize(float *a, int n) {
@@ -532,7 +526,7 @@ void initialize(float *a, int n) {
 }
 
 vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, int point_index) {
-	cout << "BP() begin" << endl;
+	cout << "BP() begin.Please waiting..." << endl;
 	vector<int> sample_index;
 	int unknown_size = unknown.size();
 	int sample_size = sample.size();
@@ -549,15 +543,18 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 		}
 	}
 
-	int i, j, k;
+	int i, j, k, x, y;
 
 	//float* tmpE2=new float[sample_size];
 	float* neighM_sum = new float[sample_size];
+	float* M_tmp = new float[sample_size];
 	float tmp_min=INFINITY;
+	float* neighM = new float[sample_size];
 	//memset(neighM_sum, 0, sizeof(neighM_sum));
 	//initialization
+	
+	//initialize(M_tmp, sample_size);
 	for (i = 0;i < unknown_size;i++) {
-		neighM_sum[i] = 0;
 		for (j = 0;j < unknown_size;j++) {
 			converged[i][j] = false;
 			for (k = 0;k < sample_size;k++) {
@@ -566,49 +563,50 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 		}
 	}
 
+	//compute E1 of anchor i
 	for (i = 0;i < unknown_size;i++) {
 		for (j = 0;j < sample_size;j++)
-			E1[i][j] = -1;
+			E1[i][j] = computeE1(unknown[i], sample[j], point_index);
 	}
 
-	for (int y = 0;y < 1;y++) {
+	//for (i = 0;i < unknown_size;i++) {
+	//	cout << "====i=======" << i << endl;
+	//	for (j = 0;j < unknown_size;j++) {
+	//		cout << "====j=======" << j << endl;
+	//		for (k = 0;k < sample_size;k++) {
+	//			cout << M[i][j][k] << " ";
+	//		}
+	//		cout << endl;
+	//	}
+	//	cout << endl;
+	//}
+	
+	for (y = 0;y < unknown_size;y++) {
 		cout << "iter time:" << y << endl;
 		for (i = 0;i < unknown_size;i++) {
-			//if (i - 1 >= 0)
-			//	addTwoVec(neighM_sum, M[i - 1][i],sample_size);
-			//if (i + 1 < unknown_size)
-			//	addTwoVec(neighM_sum, M[i + 1][i], sample_size);
-
 			//get the sum of all the messages that anchor i'neighbors send
+			initialize(neighM_sum, sample_size);
 			for (k = 0;k < unknown[i].neighbors.size();k++) {
-				addTwoVec(neighM_sum, M[unknown[i].neighbors[k]][i], sample_size);
+				neighM_sum = addTwoVec(neighM_sum, M[unknown[i].neighbors[k]][i], sample_size);
 			}
-			//cout << unknown[i].neighbors.size() << endl;
 
 			//update the message from anchor i to its neighbors
 			for (k = 0;k < unknown[i].neighbors.size();k++) {
-				if (converged[i][k])
-					continue;
 				int neighbor = unknown[i].neighbors[k];
-				minusTwoVec(neighM_sum, M[neighbor][i], sample_size);
-				//compute E1 of anchor i
-				for (j = 0;j < sample_size;j++) {
-					if(E1[i][j]==-1)
-						E1[i][j]= computeE1(unknown[i], sample[j], point_index);
-				}
-				addTwoVec(neighM_sum,E1[i], sample_size);
-				for (j = 0;j < sample_size;j++) {
-					cout << neighM_sum[j] << " ";
-				}
-				cout << endl;
-				//cout << "E1 computed" << endl;
+				if (converged[i][neighbor])
+					continue;
+				neighM = minusTwoVec(neighM_sum, M[neighbor][i], sample_size);
+				neighM = addTwoVec(neighM, E1[i], sample_size);
+				//for (j = 0;j < sample_size;j++) {
+				//	cout << neighM_sum[j] << " ";
+				//}
+				//cout << endl;
+
 				//compute E2 of anchor i and anchor neighbor
-				//cout << "anchor one:" << this->points[point_index][unknown[i].anchor_point] <<" "
-				//	<< "anchor two:" << this->points[point_index][unknown[neighbor].anchor_point] << endl;
 				for (j = 0;j < sample_size;j++) {
 					tmp_min = INFINITY;
-					for (int x = 0;x < sample_size;x++) {
-						float tmp = computeE2(unknown[i], unknown[neighbor], sample[j], sample[x], point_index);
+					for (x = 0;x < sample_size;x++) {
+						float tmp = computeE2(unknown[i], unknown[neighbor], sample[x], sample[j], point_index);
 						if (tmp < 0) {
 							cout <<"index:"<< i << " " << neighbor << " ";
 							cout << this->points[point_index][unknown[i].anchor_point] << " " 
@@ -616,60 +614,93 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 							tmp = 0;
 							break;
 						}
-						tmp_min = min(tmp_min, neighM_sum[j] + tmp);
+						//cout << "E2:" << tmp << endl;
+						tmp_min = min(tmp_min, neighM[x] + tmp);
 					}
-					neighM_sum[j] = tmp_min;
-					//cout << "tmp_min:" << tmp_min << " ";
+					M_tmp[j] = tmp_min;
 				}
 				//cout << "E2 computed" << endl;
 				//update the message
 				tmp_flag = true;
 				for (j = 0;j < sample_size;j++) {
-					//cout << M[i][k][j] << " " << neighM_sum[j] << endl;
-					if (M[i][k][j] != neighM_sum[j]) {
+					if (M[i][neighbor][j] != M_tmp[j]) {
 						tmp_flag = false;
-						M[i][k][j] = neighM_sum[j];
-						//cout << "message:" << M[i][k][j] << " inde: " << i << " " << k << " " << j << endl;
+						M[i][neighbor][j] = M_tmp[j];
+						//cout << "message:" << M[i][neighbor][j] << " index: " << i << " " << neighbor << " " << j << endl;
 					}
+/*					else {
+						if(M[i][neighbor][j]>50)
+							cout << "message:" << M[i][neighbor][j] << " index: " << i << " " << neighbor << " " << j << endl;
+					}			*/	
 				}
 				if (tmp_flag) {
-					converged[i][k] = true;
-					cout << "i:"<<i<<" k:"<<k<<endl;
+					converged[i][neighbor] = true;
+					//cout << "i:"<<i<<" neighbor:"<<neighbor<<"M:"<<M[i][neighbor][0]<<endl;
 				}
-					
 			}
 		}
 	}
 	
+	//for (i = 0;i < unknown_size;i++) {
+	//	for (j = 0;j < unknown_size;j++) {
+	//		if (M[i][j][0] > 50)
+	//			cout << M[i][j][0] << " i:" << i << " j:" << j << endl;
+	//		}
+	//	}
+
 	//compute the label
 	int index_tmp;
 	float min_tmp;
+	//check the E1
+	//cout << "====E1=====" << endl;
+	//for (i = 0;i < unknown_size;i++) {
+	//	for (j = 0;j < sample_size;j++) {
+	//		cout << E1[i][j] << " ";
+	//	}
+	//	cout << endl;
+	//}
+
+	//cout << "====M====" << endl;
+	//for (i = 0;i < unknown_size;i++) {
+	//	for (j = 0;j < unknown_size;j++) {
+	//		if (M[i][j][0] == 0)
+	//			continue;
+	//		cout << i << " " << j << endl;
+	//		for (k = 0;k < sample_size;k++) {
+	//			cout << M[i][j][k] << " ";
+	//		}		
+	//		cout << endl;
+	//	}
+	//}
+	//cout << "=============" << endl;
+
 	for (i = 0;i < unknown_size;i++) 
 	{
 		initialize(neighM_sum, sample_size);
-		addTwoVec(neighM_sum, E1[i], sample_size);
+		neighM_sum = addTwoVec(neighM_sum, E1[i], sample_size);
 		for (k = 0;k < unknown[i].neighbors.size();k++) {
 			int neighbor = unknown[i].neighbors[k];
-			addTwoVec(neighM_sum, M[neighbor][i], sample_size);
+			neighM_sum = addTwoVec(neighM_sum, M[neighbor][i], sample_size);
 		}
 		min_tmp = INFINITY;
 		for (k = 0;k < sample_size;k++) {
+			//cout << neighM_sum[k] << " ";
 			if (neighM_sum[k] < min_tmp) {
 				index_tmp = k;
 				min_tmp = neighM_sum[k];
-				cout << "min_tmp:"<<min_tmp << " index_tmp"<<k<<" ";
+				//cout << min_tmp << endl;
 			}
 		}
+		cout << endl;
+		//cout << "min_tmp:" << min_tmp << " index_tmp" << index_tmp << endl;
 		sample_index.push_back(index_tmp);
 	}
 
 	cout << sample_index.size() << endl;
-	for (int i = 0;i < sample_index.size();i++)
-		cout << sample_index[i] << " ";
-
 	cout << "BP() done" << endl;
 	return sample_index;
 }
+
 
 
 void GraphStructure::DrawNewStructure() {
@@ -696,7 +727,6 @@ void GraphStructure::DrawNewStructure() {
 				num = this->points[i].size();
 				shift = this->unknown_anchors[i].size();
 				for (int k = 0;k < this->unknown_anchors[j].size();k++) {
-					//num = this->unknown_anchors[i].size();
 					//Add shifts to point index
 					this->unknown_anchors[j][k].begin_point += num;
 					this->unknown_anchors[j][k].anchor_point += num;
@@ -706,7 +736,6 @@ void GraphStructure::DrawNewStructure() {
 					this->unknown_anchors[i].push_back(this->unknown_anchors[j][k]);
 				}
 				for (int k = 0;k < this->sample_anchors[j].size();k++) {
-					//num = this->sample_anchors[i].size();
 					this->sample_anchors[j][k].begin_point += num;
 					this->sample_anchors[j][k].anchor_point += num;
 					this->sample_anchors[j][k].end_point += num;
@@ -731,7 +760,7 @@ void GraphStructure::DrawNewStructure() {
 			DrawOneLine(this->sample_anchors[i], this->unknown_anchors[i], i, 0);
 		}		
 		else if (!this->unknown_anchors[i].empty()) {
-			//check the neighbors.
+			////check the neighbors.
 			//for (int j = 0;j < this->unknown_anchors[i].size();j++) {
 			//	cout << "anchor " << j << "'s neighbors are" << endl;
 			//	for (int k = 0;k < this->unknown_anchors[i][j].neighbors.size();k++) {
@@ -764,7 +793,7 @@ void GraphStructure::getNeighbors(int index)
 void GraphStructure::DrawOneLine(vector<Anchor> sample, vector<Anchor> unknown, int point_index,bool flag) {
 	vector<int> sample_index;
 	if(!flag)
-		sample_index = DP(sample,unknown, point_index);
+		sample_index = DP(sample, unknown, point_index);
 	else
 		sample_index = BP(sample, unknown, point_index);
 	Mat background = this->image_with_mask;
@@ -775,12 +804,6 @@ void GraphStructure::DrawOneLine(vector<Anchor> sample, vector<Anchor> unknown, 
 		copyToLargePic(unknown[i], patch, background, point_index);
 	}
 }
-
-void GraphStructure::DrawIntersectedLine(vector<int> union_set)
-{
-
-}
-
 
 //Mat getRegions(Mat input, Mat mask, vector<icPoint> points)
 //{
