@@ -1,4 +1,5 @@
 ﻿#include "GraphStructure.h"
+#include "Photometric.h"
 
 static Point2i mouse_pos;
 static int mouse_event;
@@ -96,6 +97,7 @@ void GraphStructure::getMask()
 		circle(totoshow, mouse_pos, size, Scalar(255, 0, 0), -1);
 		imshow("Generate Input Mask", totoshow);
 	}
+	Photometric::initMask(this->image_with_mask, this->mask);
 	destroyWindow("Generate Input Mask");
     return;
 }
@@ -451,6 +453,7 @@ void GraphStructure::copyToLargePic(Anchor unknown, Mat patch, Mat large,int poi
 	Point2i left_top = leftTopPoint(unknown, point_index);
 	Rect rec(left_top.x, left_top.y, PatchSizeRow, PatchSizeCol);
 	//This submatrix(large(rec)) will be a REFERENCE to PART of full matrix, NOT a copy
+	Photometric::correctE(patch, left_top.x, left_top.y);
 	patch.copyTo(large(rec));
 }
 
