@@ -691,7 +691,7 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 				//cout << min_tmp << endl;
 			}
 		}
-		cout << endl;
+		//cout << endl;
 		//cout << "min_tmp:" << min_tmp << " index_tmp" << index_tmp << endl;
 		sample_index.push_back(index_tmp);
 	}
@@ -700,8 +700,6 @@ vector<int> GraphStructure::BP(vector<Anchor> sample, vector<Anchor> unknown, in
 	cout << "BP() done" << endl;
 	return sample_index;
 }
-
-
 
 void GraphStructure::DrawNewStructure() {
 	int line_num = this->points.size();
