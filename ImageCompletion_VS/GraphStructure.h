@@ -2,25 +2,28 @@
 #define _GRAPH_STRUCTURE_H
 
 #include "anchor.h"
-
+#include <iostream>
+using namespace std;
 class GraphStructure{
 private:
     Mat image;
     Mat mask;
     Mat regions;
+	Mat image_with_mask;
+
+	vector< vector<Anchor> > sample_anchors;
+	vector< vector<Anchor> > unknown_anchors;
+	vector< vector<Point2i> > points;
 
 	//Given the last_anchor index as the first one to begin in the patch
 	//return the point of the last index in the patch and the type of the patch.
 	int  getPointsInPatch(int last_anchor, int anchor, PointType& type, int point_index);
 
-	//check the type and decide which vector(unknown_anchors or sample_anchors)to push into
-	//void pushIntoAnchors(Anchor anchor);
+	//get the neighbor index for every unknown anchor.(prepared for BP)
+	void getNeighbors(int index);
 	
 	//Given a anchor, return the left top point of the certain patch.
 	Point2i leftTopPoint(Anchor anchor, int point_index);
-
-	//Given unknown anchor point, copy the patch into the position of the point in the large picture.
-	void copyToLargePic(Anchor unknown, Mat patch, Mat large, int point_index);
 
 	bool ifLineIntersect(int i1, int i2);
 
@@ -36,19 +39,20 @@ private:
 	//To get the best label for every unknown anchor with DP method.
 	vector<int> DP(vector<Anchor> sample, vector<Anchor> unknown, int point_index);
 
+	//To get the best label for every unknown anchor with BP method.
+	vector<int> BP(vector<Anchor> sample, vector<Anchor> unknown, int point_index);
+
 	void GraphStructure::DrawOneLine(vector<Anchor> sample, vector<Anchor> unknown, int point_index,bool flag);
-	void GraphStructure::DrawIntersectedLine(vector<int> union_set);
 
 	void GraphStructure::computeAnchors(int point_index, vector<Anchor>& sample, vector<Anchor>& unknown);
 
-public:
-	Mat image_with_mask;
+	//Given unknown anchor point, copy the patch into the position of the point in the large picture.
+	void copyToLargePic(Anchor unknown, Mat patch, Mat large, int point_index);
+
+public:	
     GraphStructure(Mat input);
     ~GraphStructure(){
     }
-	vector< vector<Anchor> > sample_anchors;
-	vector< vector<Anchor> > unknown_anchors;
-	vector< vector<Point2i> > points;
 
 	//Get the user's specified unknown area.
     void getMask();
@@ -62,15 +66,9 @@ public:
 	void getCurve();
 
     //Ask the user to specify the numbers of regions
-    void getRegions();
+    //void getRegions();
 
-	vector<int> BP(vector<Anchor> sample, vector<Anchor> unknown, int point_index);
-
-	//Draw the new picture with the propagated structure
-	void DrawNewStructure();
-
-	void getNeighbors(int index);
-
+	void GraphStructure::DrawNewStructure();
 };
 
 #endif
